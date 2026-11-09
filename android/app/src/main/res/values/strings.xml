@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hairvana</string>
+    <string name="title_activity_main">Hairvana</string>
+    <string name="package_name">com.hairvana.app</string>
+    <string name="custom_url_scheme">com.hairvana.app</string>
+</resources>

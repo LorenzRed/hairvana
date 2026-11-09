@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'io.ionic.starter',
-  appName: 'hairvana',
+  appId: 'com.hairvana.app',
+  appName: 'Hairvana',
   webDir: 'dist'
 };
 
