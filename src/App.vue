@@ -1,6 +1,6 @@
 <template>
   <ion-app>
-    <ion-header>
+    <ion-header v-if="route.path !== '/auth'">
       <ion-toolbar class="main-toolbar">
         <ion-title>
           <div class="nav-brand">
@@ -27,6 +27,9 @@ import {
   IonTitle,
   IonRouterOutlet
 } from '@ionic/vue';
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
 </script>
 
 <style scoped>

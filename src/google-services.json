@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "768692862215",
+    "project_id": "hair-f3ea3",
+    "storage_bucket": "hair-f3ea3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:768692862215:android:7629a660802055dc6b59a2",
+        "android_client_info": {
+          "package_name": "com.company"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "768692862215-91t9oivkq9uhg3fmdkeolvu2612fp9gg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDW6JYBpNTPijZmf8NaKBpBHAmuXNQ9boY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "768692862215-91t9oivkq9uhg3fmdkeolvu2612fp9gg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
