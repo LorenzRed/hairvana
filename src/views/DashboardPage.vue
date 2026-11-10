@@ -3,7 +3,7 @@
     <ion-content :fullscreen="true" class="dashboard-content">
       <div class="dashboard-shell">
         <header class="topbar">
-          <div class="brand-lockup"><div class="brand-mark">H</div><div><span class="eyebrow">HAIRVANA {{ profile.role.toUpperCase() }}</span><h1>Hi, {{ firstName }} ✦</h1></div></div>
+          <div class="brand-lockup"><img class="brand-mark" src="/hairvana-logo.png" alt="Hairvana" /><div><span class="eyebrow">HAIRVANA {{ profile.role.toUpperCase() }}</span><h1>Hi, {{ firstName }} ✦</h1></div></div>
           <button class="logout-button" @click="signOut">Sign out</button>
         </header>
 

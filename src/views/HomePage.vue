@@ -4,7 +4,7 @@
       <div class="page-shell">
         <header class="topbar">
           <div class="brand-lockup">
-            <div class="brand-mark">H</div>
+            <img class="brand-mark" src="/hairvana-logo.png" alt="Hairvana" />
             <div>
               <span class="eyebrow">WELCOME BACK</span>
               <h1>Hi, {{ firstName }} <span aria-hidden="true">✦</span></h1>
@@ -237,7 +237,6 @@ async function signOut() {
 .topbar, .brand-lockup, .section-heading, .appointment-card { display: flex; align-items: center; }
 .topbar { justify-content: space-between; margin-bottom: 28px; }
 .brand-lockup { gap: 12px; }
-.brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #2f2929; color: #fff; font: 700 22px Georgia, serif; }
 .eyebrow { color: #9c8b87; font-size: 10px; font-weight: 700; letter-spacing: 1.8px; }
 h1, h2, h3, h4, p { margin: 0; }
 h1 { color: #2f2929; font: 600 21px Georgia, serif; margin-top: 3px; }

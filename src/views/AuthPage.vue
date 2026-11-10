@@ -2,7 +2,7 @@
   <ion-page>
     <ion-content :fullscreen="true" class="auth-content">
       <div class="auth-shell">
-        <div class="auth-brand"><div class="brand-mark">H</div><span>HAIRVANA</span></div>
+        <div class="auth-brand"><img class="brand-mark" src="/hairvana-logo.png" alt="Hairvana" /><span>HAIRVANA</span></div>
         <section class="auth-card">
           <span class="eyebrow">{{ isRegistering ? 'CREATE YOUR SPACE' : 'WELCOME BACK' }}</span>
           <h1>{{ isRegistering ? 'Start managing beautifully.' : 'Good to see you again.' }}</h1>
