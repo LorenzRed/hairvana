@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "686309910425",
+    "project_id": "mobile-ab844",
+    "storage_bucket": "mobile-ab844.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:686309910425:android:52b60113090f2b2e6e5508",
+        "android_client_info": {
+          "package_name": "com.trift"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "686309910425-iegkmpgae11sch8scr1811rhc6oaea54.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCz9rNIHhMuJMjnkCuh1bxgQm8PDZmvaOM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "686309910425-iegkmpgae11sch8scr1811rhc6oaea54.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

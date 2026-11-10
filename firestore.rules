@@ -1,0 +1,303 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+
+    function activeUser() {
+      return signedIn() && profile().active == true;
+    }
+
+    function isAdmin() {
+      return activeUser() && profile().role == 'admin';
+    }
+
+    function isStaff() {
+      return activeUser() && profile().role == 'staff';
+    }
+
+    function isCustomer() {
+      return activeUser() && profile().role == 'customer';
+    }
+
+    function isSeller() {
+      return activeUser() && profile().role == 'seller';
+    }
+
+    function isBuyer() {
+      return isCustomer() || isSeller();
+    }
+
+    function canListProducts() {
+      return isStaff() || isSeller();
+    }
+
+    match /profiles/{userId} {
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.active == true
+        && request.resource.data.createdAt == request.time
+        && (
+          (
+            request.resource.data.role == 'customer'
+            && request.resource.data.keys().hasOnly([
+              'uid', 'email', 'displayName', 'role', 'active', 'createdAt'
+            ])
+          )
+          || (
+            request.resource.data.role == 'staff'
+            && exists(/databases/$(database)/documents/staffInvites/$(request.auth.token.email))
+            && get(/databases/$(database)/documents/staffInvites/$(request.auth.token.email)).data.status == 'invited'
+            && get(/databases/$(database)/documents/staffInvites/$(request.auth.token.email)).data.email == request.auth.token.email
+            && getAfter(/databases/$(database)/documents/staffInvites/$(request.auth.token.email)).data.claimedBy == userId
+            && request.resource.data.keys().hasOnly([
+              'uid', 'email', 'displayName', 'role', 'active', 'createdAt'
+            ])
+          )
+        );
+
+      allow update: if (
+        signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.active == resource.data.active
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'phone', 'address', 'sellerStatus', 'sellerDescription'
+        ])
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'sellerStatus', 'sellerDescription'
+          ])
+          || (
+            resource.data.role == 'customer'
+            && request.resource.data.role == 'customer'
+            && request.resource.data.sellerStatus == 'pending'
+            && request.resource.data.sellerDescription is string
+            && request.resource.data.sellerDescription.size() >= 20
+            && (
+              !('sellerStatus' in resource.data)
+              || resource.data.sellerStatus == 'rejected'
+            )
+          )
+        )
+      ) || (
+        isAdmin()
+        && resource.data.role == 'customer'
+        && resource.data.sellerStatus == 'pending'
+        && request.resource.data.role == 'seller'
+        && request.resource.data.sellerStatus == 'approved'
+        && request.resource.data.active == resource.data.active
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'role', 'sellerStatus'
+        ])
+      ) || (
+        isAdmin()
+        && resource.data.role == 'customer'
+        && resource.data.sellerStatus == 'pending'
+        && request.resource.data.role == 'customer'
+        && request.resource.data.sellerStatus == 'rejected'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerStatus'])
+      ) || (
+        isAdmin()
+        && resource.data.role == 'staff'
+        && request.resource.data.role == 'staff'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+      );
+      allow delete: if false;
+    }
+
+    match /staffInvites/{email} {
+      allow get: if isAdmin() || (signedIn() && request.auth.token.email == resource.data.email);
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.email == email
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'invited'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'status', 'createdBy', 'createdAt'
+        ]);
+      allow update: if (
+        isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'revoked'
+      ) || (
+        isAdmin()
+        && resource.data.status == 'revoked'
+        && request.resource.data.status == 'invited'
+        && request.resource.data.email == email
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'email', 'displayName', 'status', 'createdBy', 'createdAt'
+        ])
+      ) || (
+        signedIn()
+        && resource.data.status == 'invited'
+        && resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'claimed'
+        && request.resource.data.claimedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'claimedBy', 'claimedAt'
+        ])
+        && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role == 'staff'
+      );
+      allow delete: if false;
+    }
+
+    match /products/{productId} {
+      allow read: if resource.data.status == 'active'
+        || isAdmin()
+        || (isStaff() && (
+          resource.data.staffId == request.auth.uid
+          || (
+            resource.data.status == 'reserved'
+            && get(/databases/$(database)/documents/orders/$(resource.data.reservedOrderId)).data.staffId == request.auth.uid
+          )
+        ))
+        || (isSeller() && resource.data.staffId == request.auth.uid)
+        || (isCustomer() && resource.data.reservedFor == request.auth.uid);
+
+      allow create: if canListProducts()
+        && request.resource.data.staffId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.price is number
+        && request.resource.data.price > 0
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.description is string
+        && request.resource.data.description.size() > 0
+        && request.resource.data.image is string
+        && request.resource.data.image.matches('https://.*')
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly([
+          'name', 'description', 'category', 'condition', 'size', 'price',
+          'image', 'staffId', 'status', 'createdAt', 'brand', 'color'
+        ]);
+
+      allow update: if (
+        canListProducts()
+        && resource.data.staffId == request.auth.uid
+        && resource.data.status == 'active'
+        && request.resource.data.staffId == resource.data.staffId
+        && (
+          (
+            request.resource.data.status == 'active'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'description', 'category', 'condition', 'size', 'price', 'image', 'brand', 'color'
+            ])
+          )
+          || (
+            request.resource.data.status == 'archived'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+          )
+        )
+      ) || (
+        isBuyer()
+        && resource.data.status == 'active'
+        && request.resource.data.status == 'reserved'
+        && request.resource.data.reservedFor == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'reservedFor', 'reservedOrderId'
+        ])
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.reservedOrderId)).data.buyerId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.reservedOrderId)).data.status == 'pending'
+        && getAfter(/databases/$(database)/documents/orders/$(request.resource.data.reservedOrderId)).data.item.id == productId
+      ) || (
+        isBuyer()
+        && resource.data.status == 'reserved'
+        && resource.data.reservedFor == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'reservedFor', 'reservedOrderId'
+        ])
+        && getAfter(/databases/$(database)/documents/orders/$(resource.data.reservedOrderId)).data.status == 'cancelled'
+        && getAfter(/databases/$(database)/documents/orders/$(resource.data.reservedOrderId)).data.buyerId == request.auth.uid
+      ) || (
+        isStaff()
+        && resource.data.status == 'reserved'
+        && request.resource.data.status == 'sold'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'soldAt', 'reservedFor', 'reservedOrderId'
+        ])
+        && getAfter(/databases/$(database)/documents/orders/$(resource.data.reservedOrderId)).data.status == 'delivered'
+        && getAfter(/databases/$(database)/documents/orders/$(resource.data.reservedOrderId)).data.staffId == request.auth.uid
+      );
+      allow delete: if false;
+    }
+
+    match /orders/{orderId} {
+      allow get, list: if isAdmin()
+        || (isBuyer() && resource.data.buyerId == request.auth.uid)
+        || (isSeller() && resource.data.sellerId == request.auth.uid)
+        || (isStaff() && (
+          resource.data.status == 'pending'
+          || resource.data.staffId == request.auth.uid
+        ));
+
+      allow create: if isBuyer()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.staffId == null
+        && request.resource.data.sellerId == getAfter(/databases/$(database)/documents/products/$(request.resource.data.item.id)).data.staffId
+        && request.resource.data.buyerName is string
+        && request.resource.data.buyerName.size() > 0
+        && request.resource.data.phone is string
+        && request.resource.data.phone.size() >= 7
+        && request.resource.data.address is string
+        && request.resource.data.address.size() >= 8
+        && request.resource.data.item.name is string
+        && request.resource.data.item.id is string
+        && request.resource.data.item.image is string
+        && request.resource.data.item.size is string
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.paymentMethod == 'cash_on_delivery'
+        && request.resource.data.total == request.resource.data.item.price
+        && request.resource.data.keys().hasOnly([
+          'buyerId', 'buyerName', 'phone', 'address', 'item', 'total',
+          'paymentMethod', 'status', 'staffId', 'sellerId', 'createdAt'
+        ])
+        && getAfter(/databases/$(database)/documents/products/$(request.resource.data.item.id)).data.status == 'reserved'
+        && getAfter(/databases/$(database)/documents/products/$(request.resource.data.item.id)).data.reservedFor == request.auth.uid
+        && getAfter(/databases/$(database)/documents/products/$(request.resource.data.item.id)).data.reservedOrderId == orderId
+        && getAfter(/databases/$(database)/documents/products/$(request.resource.data.item.id)).data.price == request.resource.data.total;
+
+      allow update: if (
+        isStaff()
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'claimed'
+        && request.resource.data.staffId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'staffId', 'claimedAt'
+        ])
+      ) || (
+        isStaff()
+        && resource.data.status == 'claimed'
+        && resource.data.staffId == request.auth.uid
+        && request.resource.data.status == 'delivered'
+        && request.resource.data.staffId == resource.data.staffId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt'])
+        && getAfter(/databases/$(database)/documents/products/$(resource.data.item.id)).data.status == 'sold'
+        && !getAfter(/databases/$(database)/documents/products/$(resource.data.item.id)).data.keys().hasAny(['reservedOrderId'])
+      ) || (
+        isBuyer()
+        && resource.data.buyerId == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt'])
+        && getAfter(/databases/$(database)/documents/products/$(resource.data.item.id)).data.status == 'active'
+        && !getAfter(/databases/$(database)/documents/products/$(resource.data.item.id)).data.keys().hasAny(['reservedOrderId'])
+      );
+      allow delete: if false;
+    }
+  }
+}
