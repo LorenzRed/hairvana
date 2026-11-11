@@ -1,6 +1,7 @@
 import { deleteApp, initializeApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
@@ -8,7 +9,17 @@ import {
   type User,
 } from 'firebase/auth';
 import { getAuth } from 'firebase/auth';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from 'firebase/firestore';
 
 import { auth, db, firebaseConfig } from '../firebase';
 
@@ -43,8 +54,17 @@ export async function createStaffAccount(
   const staffAuth = getAuth(staffApp);
   try {
     const credentials = await createUserWithEmailAndPassword(staffAuth, email, password);
-    await updateProfile(credentials.user, { displayName: name });
-    await saveUserProfile(credentials.user.uid, name, email, 'staff');
+    try {
+      await updateProfile(credentials.user, { displayName: name });
+      await saveUserProfile(credentials.user.uid, name, email, 'staff');
+    } catch (error) {
+      try {
+        await deleteUser(credentials.user);
+      } catch (cleanupError) {
+        console.error('Failed to remove incomplete staff account', cleanupError);
+      }
+      throw error;
+    }
   } finally {
     await signOut(staffAuth);
     await deleteApp(staffApp);

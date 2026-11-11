@@ -1,0 +1,207 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isStaffOrAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['staff', 'admin'];
+    }
+
+    function isCustomer() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'customer';
+    }
+
+    function canReadNotification(notification) {
+      return signedIn()
+        && (('recipientUserId' in notification
+            && notification.recipientUserId == request.auth.uid)
+          || ('recipientRole' in notification
+            && notification.recipientRole in ['admin', 'staff']
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+              == notification.recipientRole));
+    }
+
+    function notificationAppointmentPath() {
+      return /databases/$(database)/documents/appointments/$(request.resource.data.appointmentId);
+    }
+
+    function isBookingNotification() {
+      return signedIn()
+        && request.resource.data.type == 'booking_created'
+        && request.resource.data.recipientRole in ['admin', 'staff']
+        && request.resource.data.keys().hasOnly([
+          'title', 'body', 'type', 'appointmentId', 'createdAt', 'recipientRole'
+        ])
+        && existsAfter(notificationAppointmentPath())
+        && getAfter(notificationAppointmentPath()).data.customerId == request.auth.uid
+        && getAfter(notificationAppointmentPath()).data.status == 'pending';
+    }
+
+    function isStatusNotification() {
+      return isStaffOrAdmin()
+        && request.resource.data.type == 'booking_status'
+        && request.resource.data.keys().hasOnly([
+          'title', 'body', 'type', 'appointmentId', 'createdAt', 'recipientUserId'
+        ])
+        && existsAfter(notificationAppointmentPath())
+        && exists(notificationAppointmentPath())
+        && request.resource.data.recipientUserId
+          == getAfter(notificationAppointmentPath()).data.customerId
+        && get(notificationAppointmentPath()).data.status
+          != getAfter(notificationAppointmentPath()).data.status;
+    }
+
+    function isCustomerCancellationNotification() {
+      return isCustomer()
+        && request.resource.data.type == 'booking_cancelled'
+        && request.resource.data.recipientRole in ['admin', 'staff']
+        && request.resource.data.keys().hasOnly([
+          'title', 'body', 'type', 'appointmentId', 'createdAt', 'recipientRole'
+        ])
+        && existsAfter(notificationAppointmentPath())
+        && exists(notificationAppointmentPath())
+        && getAfter(notificationAppointmentPath()).data.customerId == request.auth.uid
+        && get(notificationAppointmentPath()).data.status == 'pending'
+        && getAfter(notificationAppointmentPath()).data.status == 'cancelled';
+    }
+
+    function isPaymentNotification() {
+      return isStaffOrAdmin()
+        && request.resource.data.type == 'payment_recorded'
+        && request.resource.data.keys().hasOnly([
+          'title', 'body', 'type', 'appointmentId', 'createdAt', 'recipientUserId'
+        ])
+        && existsAfter(notificationAppointmentPath())
+        && exists(notificationAppointmentPath())
+        && request.resource.data.recipientUserId
+          == getAfter(notificationAppointmentPath()).data.customerId
+        && get(notificationAppointmentPath()).data.paymentStatus != 'paid'
+        && getAfter(notificationAppointmentPath()).data.paymentStatus == 'paid';
+    }
+
+    match /users/{userId} {
+      allow create: if (
+          isOwner(userId)
+          && request.resource.data.role == 'customer'
+          && request.resource.data.email == request.auth.token.email
+        ) || (
+          isAdmin()
+          && request.resource.data.role == 'staff'
+        );
+      allow read: if isOwner(userId) || isAdmin()
+        || (signedIn() && resource.data.role == 'staff');
+      allow update: if isAdmin()
+        || (isOwner(userId) && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+
+      match /notificationReads/{notificationId} {
+        function notificationPath() {
+          return /databases/$(database)/documents/notifications/$(notificationId);
+        }
+
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && exists(notificationPath())
+          && canReadNotification(get(notificationPath()).data);
+        allow delete: if false;
+      }
+    }
+
+    match /services/{serviceId} {
+      allow read: if signedIn();
+      allow create: if isAdmin()
+        || (isStaffOrAdmin()
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.imageData.size() < 800000);
+      allow update: if isAdmin()
+        || (signedIn()
+          && resource.data.createdBy == request.auth.uid
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.imageData.size() < 800000);
+      allow delete: if isAdmin()
+        || (signedIn() && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /appointments/{appointmentId} {
+      allow create: if signedIn()
+        && request.resource.data.customerId == request.auth.uid;
+      allow read: if isStaffOrAdmin()
+        || (signedIn() && resource.data.customerId == request.auth.uid);
+      allow update: if isStaffOrAdmin()
+        || (signedIn()
+          && resource.data.customerId == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
+      allow delete: if isAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.recordedBy == request.auth.uid);
+      allow create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'appointmentId', 'customerId', 'serviceId', 'serviceName',
+          'rating', 'comment', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'appointmentId', 'customerId', 'serviceId', 'serviceName',
+          'rating', 'comment', 'createdAt'
+        ])
+        && request.resource.data.appointmentId == feedbackId
+        && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 500
+        && request.resource.data.createdAt == request.time
+        && exists(/databases/$(database)/documents/appointments/$(feedbackId))
+        && get(/databases/$(database)/documents/appointments/$(feedbackId)).data.customerId == request.auth.uid
+        && get(/databases/$(database)/documents/appointments/$(feedbackId)).data.status == 'completed'
+        && request.resource.data.serviceId
+          == get(/databases/$(database)/documents/appointments/$(feedbackId)).data.serviceId
+        && request.resource.data.serviceName
+          == get(/databases/$(database)/documents/appointments/$(feedbackId)).data.serviceName;
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if canReadNotification(resource.data);
+      allow create: if request.resource.data.keys().hasAll([
+          'title', 'body', 'type', 'appointmentId', 'createdAt'
+        ])
+        && (
+          isBookingNotification()
+          || isStatusNotification()
+          || isCustomerCancellationNotification()
+          || isPaymentNotification()
+        );
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
